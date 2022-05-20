@@ -228,9 +228,9 @@ def main(args):
 
 def parse_args():
     parser = ArgumentParser(__doc__)
-    parser.add_argument("--file_in", default="./test_01.txt")
-    parser.add_argument("--file_out", default="./out_01.txt")
-    parser.add_argument("--image_out", default="./out_01.png")
+    parser.add_argument("--file_in", default="./test.txt")
+    parser.add_argument("--file_out", default="./out.txt")
+    parser.add_argument("--image_out", default="./out.png")
     parser.add_argument("--min_dist", default=5)
     return parser.parse_args()
 
