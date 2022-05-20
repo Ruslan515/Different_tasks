@@ -1,0 +1,109 @@
+
+1. SQL (диалект можешь выбрать любой))
+
+SQL – основной язык запросов, который использует в своей работе любой аналитик
+
+
+Существует три таблицы:
+1. Orders - информация о заказах
+Поля:
+date - время заказа в timestamp
+clientId - id пользователя, который совершил заказ
+id - id заказа
+ClientOrderStateID - статус заказа, меняется во времени в зависимости
+от стадии заказа
+Статусы заказа:
+1 - заказ оформлен
+2 - заказ получен
+3 - заказ отменен
+
+2. AdditionalInfo - информация об источнике заказа
+Поля:
+ClientOrderID - id заказа
+code - параметр
+value - значение параметра из столбца code
+code принимает следующие значения:
+IsTestOrder - тестовый заказ или нет в value может быть (1/0)
+platform - платформа, с которой был куплен заказ в value может быть (site/mobile_site/app)
+hasMarketingAction - есть ли акция на заказе в value может быть (1/0)
+
+3. ClientOrderItem - информация о товарах в заказе
+Поля:
+ClientOrderID - id заказа
+ItemId - id товара
+category - категория товара
+qty - количество
+price - цена за одну единицу товара
+
+1. Вывести сколько заказов было оформлено, и сколько в итоге
+получено. Не учитывать тестовые заказы.
+
+2. Для каждой платформы и категории посчитать сколько было куплено
+товаров, сколько было получено заказов, сколько всего денег принесли проданные товары. Не учитывать тестовые заказы. 
+
+Найти категорию, которая приносит наибольшую выручку.
+
+3. Какой товар чаще других встречается в отмененных заказах.
+
+########################################################################################################
+
+1.
+-- выводим статус и кол-о заказов с данным статусом
+select O.ClientOrderStateID, count(O.ClientOrderStateID) as count_order
+from 
+--вытаскиваем id не тестовых заказов и получаем пересечение с таблицей заказов.
+--в итоге все заказы не тестовые
+	(select ClientOrderID as id
+	from AdditionalInfo where value != 'IsTestOrder') t1 join Orders O on t1.id = O.id
+-- выбираем заказы оформленные и полученные
+where O.ClientOrderStateID = 1 or O.ClientOrderStateID = 2
+-- группировка по статусу
+group by O.ClientOrderStateID 
+-- сортировка
+order by O.ClientOrderStateID
+
+2.
+-- выводим кол-о товаров, кол-о заказов, сумма
+select t2.platform, C.category, sum(C.qty), count(C.ClientOrderID), sum(C.price * C.qty)
+from 
+-- получаем id и platform всех заказов,  которые не тестовые и были куплены (статус = получен)
+	(select   t1.id, t1.platform
+	from 
+	--вытаскиваем id не тестовых заказов и получаем пересечение с таблицей заказов.
+	--в итоге все заказы не тестовые
+		(select ClientOrderID as id, platform
+		from AdditionalInfo where value != 'IsTestOrder') t1 join Orders O on t1.id = O.id 
+	-- заказы только те которые получены, соот-о они оплачены
+	where O.ClientOrderStateID = 2) t2 join ClientOrderItem C on t2.id = C.id
+group by t2.platform, C.category
+
+--категория которая приносит наибольшую выручку. тестовые заказы не учитываются
+-- таблица где для каждой категории указана выручка
+select C.category, sum(C.price * C.qty) as val
+from 
+-- получаем id всех заказов, которые не тестовые и были куплены (статус = получен)
+	(select   t1.id
+	from 
+	--вытаскиваем id не тестовых заказов и получаем пересечение с таблицей заказов.
+	--в итоге все заказы не тестовые
+		(select ClientOrderID as id
+		from AdditionalInfo where value != 'IsTestOrder') t1 join Orders O on t1.id = O.id 
+	-- заказы только те которые получены, соот-о они оплачены
+	where O.ClientOrderStateID = 2) t2 join ClientOrderItem C on t2.id = C.id
+group by C.category
+order by val desc
+limit 1
+
+3. 
+
+select ItemId, count(*) as count_t
+from (
+	-- формируем список id заказов которые были отменены
+	select id
+	from Orders
+	where ClientOrderStateID = 3
+	) t1 join ClientOrderItem C on t1.id = C.id
+group by ItemId
+order by count_c desc
+limit 1
+
