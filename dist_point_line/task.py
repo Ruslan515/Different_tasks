@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Khalikov Ruslan. 13.05.2022
+Khalikov Ruslan. 20.05.2022
 На плоскости задана область.
 Внутри области расположено множество точек с координатами, их N.
 Также задана кусочно-линейная кривая  в виде упорядоченного набора узлов, их M.
@@ -8,16 +8,14 @@ Khalikov Ruslan. 13.05.2022
 
 Формат входных данных:
 N M
-x1 y1
-...
-...
-xN yN
 индекс_1_точки_кривой ... индекс_М_точки_кривой
 
-python3 task.py --file_in "input file" --file_out "out file" --min_dist "minimal dist"
+python3 task.py --file_in "input file" --file_out "out file" --image_out "out_image.png" --min_dist "minimal dist"
 
 """
 import sys
+import numpy as np
+import matplotlib.pyplot as plt
 from argparse import ArgumentParser
 import math
 from typing import List, Tuple, Set
@@ -46,13 +44,6 @@ class Vector:
         """
         return self.x * vector2.x + self.y * vector2.y
 
-def parse_args():
-    parser = ArgumentParser(__doc__)
-    parser.add_argument("--file_in", default="./test_01.txt")
-    parser.add_argument("--file_out", default="./out_01.txt")
-    parser.add_argument("--min_dist", default=5)
-    return parser.parse_args()
-
 def read_data(file_in):
     """
     :return:
@@ -61,9 +52,12 @@ def read_data(file_in):
     with open(file_in, "r") as fin:
         N, M = map(int, fin.readline().split())
         P = []
-        for _ in range(N):
-            x, y = map(float, fin.readline().split())
-            P.append(Point(x, y))
+        # for _ in range(N):
+        #     x, y = map(float, fin.readline().split())
+        #     P.append(Point(x, y))
+
+        x, y = list(np.random.uniform(-10, 10, size=N)), list(np.random.uniform(-10, 10, size=N))
+        P = [Point(x_i, y_i) for x_i, y_i in zip(x, y)]
 
         list_idx_line = list(
             map(
@@ -75,26 +69,47 @@ def read_data(file_in):
 
     return N, M, P, C, list_idx_line
 
-def calc_dist(ab, bc, ac, a, b, c) -> float:
+def euclid_dist(first: Point, second: Point) -> float:
+    """
+    евклидово расстояние между точками
+    :param first:
+    :param second:
+    :return:
+    """
+    h_x = first.x - second.x
+    h_y = first.y - second.y
+    e_dist = math.sqrt(h_x**2 + h_y**2)
+    return e_dist
+
+def calc_dist(ab, bc, ac, a, b, c) -> Tuple[float, float]:
+    """
+    Вычисляет расстояние от заданной точки до семгента.
+    так же до первой точки сегмента - А
+    :param ab:
+    :param bc:
+    :param ac:
+    :param a:
+    :param b:
+    :param c:
+    :return:
+    """
     dot_prod_ab_bc = ab.dot_product(bc)
     dot_prod_ab_ac = ab.dot_product(ac)
 
+    dist_to_first_point = euclid_dist(c, a)
+
     if dot_prod_ab_bc > 0:
-        h_x = c.x - b.x
-        h_y = c.y - b.y
-        d = math.sqrt(h_x**2 + h_y**2)
+        dist_to_segment = euclid_dist(c, b)
     elif dot_prod_ab_ac < 0:
-        h_x = c.x - a.x
-        h_y = c.y - a.y
-        d = math.sqrt(h_x**2 + h_y**2)
+        dist_to_segment= dist_to_first_point
     else:
         x1 = ab.x
         x2 = ac.x
         y1 = ab.y
         y2 = ac.y
-        d = abs(x1 * y2 - y1 * x2) / (math.sqrt(x1**2 + y1**2))
+        dist_to_segment= abs(x1 * y2 - y1 * x2) / (math.sqrt(x1**2 + y1**2))
 
-    return d
+    return dist_to_segment, dist_to_first_point
 
 def get_dist(
         P, list_idx_not_in_line, idx, idx_1, min_dist, idx_answer: Set
@@ -110,7 +125,12 @@ def get_dist(
     :param min_dist:
     :return:
     """
-    answer = []
+    answer = {}
+    """
+    answer - словарь вида:
+    ключ - пара(точка, расстояние до сегмента)
+    значение - расстояние до первой точки сегмента.    
+    """
     point_a = P[idx]
     point_b = P[idx_1]
     ab = Vector(point_a, point_b)
@@ -118,10 +138,15 @@ def get_dist(
         point_c = P[i]
         bc = Vector(point_b, point_c)
         ac = Vector(point_a, point_c)
-        dist = calc_dist(ab, bc, ac, point_a, point_b, point_c)
-        if (dist <= min_dist and (i not in idx_answer)):
-            answer.append((P[i], dist))
+        dist_to_segment, dist_to_first_point = calc_dist(ab, bc, ac, point_a, point_b, point_c)
+        if (dist_to_segment <= min_dist and (i not in idx_answer)):
+            answer[(P[i], dist_to_segment)] = dist_to_first_point
             idx_answer.add(i)
+
+    """
+    получили словарь. теперь отсортируем его по расстоянию до первой точки сегмента    
+    """
+    answer = [x[0] for x in sorted(answer.items(), key=lambda x: x[1])]
     return answer
 
 def calculate(N, M, P, C, list_idx_line, args) -> Tuple[List[Tuple[Point, float]], Set]:
@@ -149,6 +174,33 @@ def calculate(N, M, P, C, list_idx_line, args) -> Tuple[List[Tuple[Point, float]
 
     return temp_tilda, idx_answer
 
+def draw_dotes(P: List[Point], C: List[Point], answer_dots: List[Point], image_out) -> int:
+    """
+    нарисуем наши точки, линию и выходные точки
+    :param P:
+    :param C:
+    :param answer_dots:
+    :param image_out:
+    :return:
+    """
+    x, y = [point.x for point in P], [point.y for point in P]
+    plt.plot(x, y, "o")
+
+    # for point in P:
+    #     plt.annotate(f"({point.x:0.2f};{point.y:0.2f})", (point.x, point.y))
+
+    x, y = [point.x for point in answer_dots], [point.y for point in answer_dots]
+    plt.plot(x, y, "x", color='red')
+    for i, point in enumerate(answer_dots):
+        plt.annotate(f"{i} - ({point.x:0.2f};{point.y:0.2f})", (point.x, point.y))
+
+
+    x, y = [point.x for point in C], [point.y for point in C]
+    plt.plot(x, y)
+    plt.savefig(image_out)
+
+    return 0
+
 def print_answer(set_tilda: Tuple[List[Tuple[Point, float]], Set], args):
     """
     вывод результата
@@ -170,8 +222,17 @@ def main(args):
     """
     N, M, P, C, list_idx_line = read_data(args.file_in)
     set_tilda = calculate(N, M, P, C, list_idx_line, args)
+    draw_dotes(P, C, [p for p, d in set_tilda[0]], args.image_out)
 
     print_answer(set_tilda, args)
+
+def parse_args():
+    parser = ArgumentParser(__doc__)
+    parser.add_argument("--file_in", default="./test_01.txt")
+    parser.add_argument("--file_out", default="./out_01.txt")
+    parser.add_argument("--image_out", default="./out_01.png")
+    parser.add_argument("--min_dist", default=5)
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
